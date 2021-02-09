@@ -3,43 +3,48 @@
 
 library(tidyverse)
 library(magrittr)
-library(RANN)
+library(mice)
 library(caret)
 # load data and remove "Id"
 train = read_csv("C:/Users/User/Desktop/kaggle/house-prices-advanced-regression-techniques/train.csv") %>% dplyr::select(-Id)
-train$SalePrice = log(train$SalePrice, base = exp(1))
 test = read_csv("C:/Users/User/Desktop/kaggle/house-prices-advanced-regression-techniques/test.csv") %>% dplyr::select(-Id)
-test$SalePrice = log(test$SalePrice, base = exp(1))
-colnames(train)
-dim(train)
 # data : (1460, 80)
-str(train)
 
 plot(SalePrice~YearBuilt, data = train)
+abline(lm(SalePrice~YearBuilt, data = train), col = "red")
 lm(SalePrice~YearBuilt, data = train) %>% summary()
 plot(SalePrice~YearRemodAdd, data = train)
+abline(lm(SalePrice~YearRemodAdd, data = train), col = "red")
 lm(SalePrice~YearRemodAdd, data = train) %>% summary()
+plot(SalePrice~GarageYrBlt, data = train)
+abline(lm(SalePrice~GarageYrBlt, data = train), col = "red")
+lm(SalePrice~GarageYrBlt, data = train) %>% summary()
+train %>% select(YearBuilt, GarageYrBlt, YearRemodAdd) %>% na.omit() %>% cor()
+
+plot(SalePrice~as.factor(MoSold), train)
+anova(lm(SalePrice~as.factor(MoSold), train))
+plot(SalePrice~as.factor(YrSold), train)
+anova(lm(SalePrice~as.factor(YrSold), train))
 
 train$MSSubClass %<>% as.character()
 # train$YearBuilt %<>% as.character()
 # train$YearRemodAdd %<>% as.character()
+# train$GarageYrBlt %<>% as.character()
 train$MoSold %<>% as.character()
 train$YrSold %<>% as.character()
-train$GarageYrBlt %<>% as.character()
 
 test$MSSubClass %<>% as.character()
 # test$YearBuilt %<>% as.character()
 # test$YearRemodAdd %<>% as.character()
+# test$GarageYrBlt %<>% as.character()
 test$MoSold %<>% as.character()
 test$YrSold %<>% as.character()
-test$GarageYrBlt %<>% as.character()
 
 colnames(train)[c(43,44,69)] = c("FlrSF_1","FlrSF_2","snPorch_3S")
 colnames(test)[c(43,44,69)] = c("FlrSF_1","FlrSF_2","snPorch_3S")
 
 # time split
-plot(x = train$MoSold, y = train$SalePrice)
-plot(x = train$YrSold, y = train$SalePrice)
+
 train %>% 
   dplyr::select(YrSold, MoSold, SalePrice) %>% 
   group_by(YrSold, MoSold) %>% 
@@ -49,6 +54,17 @@ train %>%
 
 train %>% group_by(YrSold, MoSold) %>% count(sort = T)
 train %>% filter(YrSold == "2010") %>% filter(MoSold == "7") %>% dim()
+
+# factor imbalance
+train %>% group_by(MSSubClass) %>% count(sort = T)
+train %>% group_by(MSZoning) %>% count(sort = T)
+plot(SalePrice~as.factor(MSSubClass), train)
+plot(SalePrice~as.factor(MSSubClass), train %>% filter(MSSubClass %in% c("150","40","45","180","75")))
+lm(SalePrice~as.factor(MSSubClass), train) %>% anova()
+lm(SalePrice~as.factor(MSSubClass), train %>% filter(MSSubClass %in% c("150","40","45","180","75"))) %>% anova()
+
+train[which(train$MSSubClass %in% c("150","40")), "MSSubClass"] = "others"
+test[which(test$MSSubClass %in% c("150","40")), "MSSubClass"] = "others"
 
 # dealing with NA's -------------------------------------------------------
 
@@ -68,7 +84,7 @@ train$Alley[which(is.na(train$Alley))] = "No Alley"
 train[is.na(train$Fence), "Fence"] = "No Fence"
 train[is.na(train$PoolQC), "PoolQC"] = "No PoolQC"
 train[is.na(train$MiscFeature), "MiscFeature"] = "No MiscFeature"
-train[is.na(train$FireplaceQu), "FireplaceQu"] = "No Firespace"
+train[is.na(train$FireplaceQu), "FireplaceQu"] = "No Fireplace"
 
 test$Alley[which(is.na(test$Alley))] = "No Alley"
 test[is.na(test$Fence), "Fence"] = "No Fence"
@@ -86,38 +102,28 @@ train %>% filter(is.na(MasVnrType)) %>% filter(is.na(MasVnrArea)) %>% dplyr::sel
 test %>% filter(!is.na(MasVnrType)) %>% filter(is.na(MasVnrArea)) %>% dplyr::select(MasVnrType, MasVnrArea)
 test %>% filter(is.na(MasVnrType)) %>% filter(!is.na(MasVnrArea)) %>% dplyr::select(MasVnrType, MasVnrArea)
 
+# BsmtQual, BsmtCond, BsmtExposure, BsmtFinType1, BsmtFinType2 ------------
 
-# Some of BsmtQual, BsmtCond, BsmtExposure, BsmtFinType1, BsmtFinType2 are really missing
 train %>% filter(is.na(BsmtQual), is.na(BsmtCond), is.na(BsmtExposure), is.na(BsmtFinType1), is.na(BsmtFinType2)) %>% dplyr::select(BsmtQual, BsmtCond, BsmtExposure, BsmtFinType1, BsmtFinType2) %>% is.na() %>% colSums()
-ind = which(is.na(train$BsmtQual))
+test %>% filter(is.na(BsmtQual), is.na(BsmtCond), is.na(BsmtExposure), is.na(BsmtFinType1), is.na(BsmtFinType2)) %>% dplyr::select(BsmtQual, BsmtCond, BsmtExposure, BsmtFinType1, BsmtFinType2) %>% is.na() %>% colSums()
+
+ind = which(is.na(train$BsmtQual)& is.na(train$BsmtCond)& is.na(train$BsmtExposure)& is.na(train$BsmtFinType1)&is.na(train$BsmtFinType2))
 train[ind, c("BsmtQual", "BsmtCond", "BsmtExposure", "BsmtFinType1", "BsmtFinType2")] = "No Basement"
+ind = which(is.na(test$BsmtQual)& is.na(test$BsmtCond)& is.na(test$BsmtExposure)& is.na(test$BsmtFinType1)&is.na(test$BsmtFinType2))
+test[ind, c("BsmtQual", "BsmtCond", "BsmtExposure", "BsmtFinType1", "BsmtFinType2")] = "No Basement"
 
-test %>% filter(is.na(BsmtCond), is.na(BsmtQual), is.na(BsmtExposure), is.na(BsmtFinType1),
-                is.na(BsmtFinType2), is.na(BsmtUnfSF), is.na(BsmtFullBath), is.na(BsmtHalfBath)) %>%  select(BsmtQual, BsmtCond, BsmtExposure, BsmtFinType1, BsmtFinSF1, BsmtFinType2,BsmtFinSF2,BsmtUnfSF,TotalBsmtSF,BsmtFullBath,BsmtHalfBath)
+# GarageType, GarageYrBlt, GarageFinish, GarageQual, GarageCond  ----------
 
-
-test %>% filter(!is.na(BsmtCond)) %>% filter(is.na(BsmtQual)) %>%  select(BsmtQual, BsmtCond)
-ind = which(is.na(test$BsmtCond) & is.na(test$BsmtQual))
-test[ind, c("BsmtQual", "BsmtCond")] = "No Basement"
-
-
-
-# GarageType, GarageYrBlt, GarageFinish, GarageQual, GarageCond 
 train %>% filter(is.na(GarageType), is.na(GarageYrBlt), is.na(GarageFinish), is.na(GarageQual), is.na(GarageCond)) %>% dplyr::select(GarageType, GarageYrBlt, GarageFinish, GarageQual, GarageCond) %>% is.na() %>% colSums()
-train  %>% dplyr::select(GarageType, GarageYrBlt, GarageFinish, GarageQual, GarageCond) %>% is.na() %>% colSums()
-
 test %>% filter(is.na(GarageType), is.na(GarageYrBlt), is.na(GarageFinish), is.na(GarageQual), is.na(GarageCond)) %>% dplyr::select(GarageType, GarageYrBlt, GarageFinish, GarageQual, GarageCond) %>% is.na() %>% colSums()
-test  %>% dplyr::select(GarageType, GarageYrBlt, GarageFinish, GarageQual, GarageCond) %>% is.na() %>% colSums()
 
-train %>% filter(is.na(GarageType)) %>% dplyr::select(GarageType, GarageYrBlt, GarageFinish, GarageQual, GarageCond) %>% is.na() %>% colSums()
-test %>% filter(is.na(GarageType)) %>% dplyr::select(GarageType, GarageYrBlt, GarageFinish, GarageQual, GarageCond) %>% is.na() %>% colSums()
+ind = which(is.na(train$GarageType) & is.na(train$GarageFinish) & is.na(train$GarageQual) & is.na(train$GarageCond))
+train[ind, c("GarageType", "GarageFinish", "GarageQual", "GarageCond")] = "No Garage"
+train[ind, "GarageYrBlt"] = train[ind, "YearBuilt"]
 
-ind = which(is.na(train$GarageType))
-train[ind, c("GarageType", "GarageYrBlt", "GarageFinish", "GarageQual", "GarageCond")] = "No Garage"
-
-ind = which(is.na(test$GarageType)& is.na(test$GarageYrBlt)& is.na(test$GarageFinish)& is.na(test$GarageQual)& is.na(test$GarageCond))
-test[ind, c("GarageType", "GarageYrBlt", "GarageFinish", "GarageQual", "GarageCond")] = "No Garage"
-
+ind = which(is.na(test$GarageType) & is.na(test$GarageFinish) & is.na(test$GarageQual) & is.na(test$GarageCond))
+test[ind, c("GarageType", "GarageFinish", "GarageQual", "GarageCond")] = "No Garage"
+test[ind, "GarageYrBlt"] = test[ind, "YearBuilt"]
 
 # count amount
 count_na = sapply(1:dim(train)[2], function(i){sum(is.na(train[,i]))})
@@ -171,16 +177,16 @@ plot_density = function(var_name){
   dev.off()
 }
 
-for(name in colnames(train[, sapply(train, class) != 'numeric'])){
-  plot_bar(name)
-}
-for(name in colnames(train[, sapply(train, class) == 'numeric'])){
-  if(name != "LotFrontage"){
-    plot_density(name)
-  }else{
-    print(name)
-  }
-}
+# for(name in colnames(train[, sapply(train, class) != 'numeric'])){
+#   plot_bar(name)
+# }
+# for(name in colnames(train[, sapply(train, class) == 'numeric'])){
+#   if(name != "LotFrontage"){
+#     plot_density(name)
+#   }else{
+#     print(name)
+#   }
+# }
 
 # plot two variales -------------------------------------------------------
 
@@ -209,16 +215,16 @@ plot_scatter = function(var_name){
   print(p)
   dev.off()
 }
-for(name in colnames(train[, sapply(train, class) != 'numeric'])){
-  plot_box(name)
-}
-for(name in colnames(train[, sapply(train, class) == 'numeric'])){
-  if(name != "SalePrice"){
-    plot_scatter(name)
-  }else{
-    print(name)
-  }
-}
+# for(name in colnames(train[, sapply(train, class) != 'numeric'])){
+#   plot_box(name)
+# }
+# for(name in colnames(train[, sapply(train, class) == 'numeric'])){
+#   if(name != "SalePrice"){
+#     plot_scatter(name)
+#   }else{
+#     print(name)
+#   }
+# }
 
 
 # near zero variables -----------------------------------------------------
@@ -238,23 +244,127 @@ train %>% select(high_cor_var) %>% na.omit() %>% cor()
 
 # preprocess --------------------------------------------------------------
 
-train_knn = preProcess(as.data.frame(train), method = "knnImpute")
-train_knn = predict(train_knn, newdata = train)
+train_imp = mice(data = train, method = "cart", m = 5, maxit = 5) 
+test_imp = mice(data = test, method = "cart", m = 5, maxit = 5) 
+train_imp = complete(train_imp, action = 1)
+test_imp = complete(test_imp, action = 1)
 
-count_na = sapply(1:dim(train_knn)[2], function(i){sum(is.na(train_knn[,i]))})
+# count amount
+count_na = sapply(1:dim(train_imp)[2], function(i){sum(is.na(train_imp[,i]))})
 # check NA columns
 for(i in which(count_na != 0)){
-  cat(colnames(train_knn)[i], count_na[i], "\n")
+  cat(colnames(train_imp)[i], count_na[i], "\n")
 }
 
+count_na = sapply(1:dim(test_imp)[2], function(i){sum(is.na(test_imp[,i]))})
+# check NA columns
+for(i in which(count_na != 0)){
+  cat(colnames(test_imp)[i], count_na[i], "\n")
+}
 
+# table(train$MasVnrType)
+# table(train$BsmtExposure)
+# table(train$BsmtFinType2) 
+# table(train$Electrical)
+train_imp[which(is.na(train_imp$MasVnrType)), "MasVnrType"] = "None"
+train_imp[which(is.na(train_imp$BsmtExposure)), "BsmtExposure"] = "No"
+train_imp[which(is.na(train_imp$BsmtFinType2)), "BsmtFinType2"] = "Unf"
+train_imp[which(is.na(train_imp$Electrical)), "Electrical"] = "SBrkr"
+anyNA(train_imp)
+
+# tmp_train = train_imp %>% filter(!is.na(MasVnrType)) %>% dplyr::select(-c(BsmtExposure,BsmtFinType2,Electrical))
+# tmp_test = train_imp %>% filter(is.na(MasVnrType)) %>% dplyr::select(-c(BsmtExposure,BsmtFinType2,Electrical))
+# anyNA(tmp_train %>% dplyr::select(-MasVnrType))
+# tree.fit = rpart(MasVnrType~, data = tmp_train)
+
+table(test$MSZoning) %>% which.max()
+table(test$Exterior1st) %>% which.max()
+table(test$Exterior2nd) %>% which.max()
+table(test$MasVnrType) %>% which.max()
+table(test$BsmtQual) %>% which.max()
+table(test$BsmtCond) %>% which.max()
+table(test$BsmtExposure) %>% which.max()
+table(test$KitchenQual) %>% which.max()
+table(test$Functional) %>% which.max()
+table(test$GarageYrBlt) %>% which.max()
+table(test$GarageFinish)  %>% which.max()
+table(test$GarageQual) %>% which.max()
+table(test$GarageCond) %>% which.max()
+table(test$SaleType) %>% which.max()
+
+test_imp[which(is.na(test_imp$MSZoning)), "MSZoning"] = "RL"
+test_imp[which(is.na(test_imp$Exterior1st)), "Exterior1st"] = "VinylSd"
+test_imp[which(is.na(test_imp$Exterior2nd)), "Exterior2nd"] = "VinylSd"
+test_imp[which(is.na(test_imp$MasVnrType)), "MasVnrType"] = "None"
+test_imp[which(is.na(test_imp$BsmtQual)), "BsmtQual"] = "TA"
+test_imp[which(is.na(test_imp$BsmtCond)), "BsmtCond"] = "TA"
+test_imp[which(is.na(test_imp$BsmtExposure)), "BsmtExposure"] = "No"
+test_imp[which(is.na(test_imp$KitchenQual)), "KitchenQual"] = "TA"
+test_imp[which(is.na(test_imp$Functional)), "Functional"] = "Typ"
+test_imp[which(is.na(test_imp$GarageYrBlt)), "GarageYrBlt"] = 2005
+test_imp[which(is.na(test_imp$GarageFinish)), "GarageFinish"] = "Unf"
+test_imp[which(is.na(test_imp$GarageQual)), "GarageQual"] = "TA"
+test_imp[which(is.na(test_imp$GarageCond)), "GarageCond"] = "TA"
+test_imp[which(is.na(test_imp$SaleType)), "SaleType"] = "WD" 
+anyNA(test_imp)
+
+save.image("C:/Users/User/Desktop/kaggle/house-prices-advanced-regression-techniques/dataset.RData")
 # model fitting  ----------------------------------------------------------
+load("C:/Users/User/Desktop/kaggle/house-prices-advanced-regression-techniques/dataset.RData")
+
 
 tcrl = trainControl(method = "cv", number = 10, verboseIter = FALSE)
 set.seed(1122)
-gbmFit1 = train(SalePrice ~ ., 
-                data = train_knn, 
-                method = "gbm", 
+# linear model with lasso & ridge mixed penalty ---------------------------
+
+grid = expand.grid(alpha = seq(0.1,1,length.out = 10), lambda = seq(0,1500,length.out = 50))
+lm.fit = train(SalePrice ~ .,
+               data = train_imp, 
+               method = "glmnet", 
+               trControl = tcrl,
+               metric = "RMSE",
+               maximize = FALSE,
+               tuneGrid = grid,
+               verbose = FALSE)
+lm.fit
+plot(lm.fit,
+     metric = "RMSE", 
+     xlab = "lambda",
+     nameInStrip = TRUE,
+     highlight = TRUE)
+
+submit = read.csv("C:/Users/User/Desktop/kaggle/house-prices-advanced-regression-techniques/sample_submission.csv")
+submit$SalePrice = predict(lm.fit, newdata = test_imp)
+write.csv(submit, file = "C:/Users/User/Desktop/kaggle/house-prices-advanced-regression-techniques/lm_submit.csv", row.names = FALSE)
+
+# boosting ----------------------------------------------------------------
+
+# grid = expand.grid(nrounds = 1000,
+#                    max_depth = c(5,7,9),
+#                    eta = ,
+#                    gamma (Minimum Loss Reduction),
+#                    subsample (Subsample Percentage),
+#                    colsample_bytree (Subsample Ratio of Columns),
+#                    rate_drop (Fraction of Trees Dropped),
+#                    skip_drop = seq(0.4, 0.6),
+#                    min_child_weight,)
+xgb.fit = train(SalePrice ~ .,
+                data = train_imp, 
+                method = "xgbLinear", 
                 trControl = tcrl,
+                metric = "RMSE",
+                objective = "reg:squarederror",
+                maximize = FALSE,
+                tuneLength = 10,
                 verbose = TRUE)
-gbmFit1
+xgb.fit
+plot(xgb.fit,
+     metric = "RMSE", 
+     # xlab = "lambda",
+     nameInStrip = TRUE,
+     highlight = TRUE)
+
+submit = read.csv("C:/Users/User/Desktop/kaggle/house-prices-advanced-regression-techniques/sample_submission.csv")
+submit$SalePrice = predict(xgb.fit, newdata = test_imp)
+write.csv(submit, file = "C:/Users/User/Desktop/kaggle/house-prices-advanced-regression-techniques/xgb_submit.csv", row.names = FALSE)
+
