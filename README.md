@@ -12,3 +12,4 @@ Submissions are evaluated on Root-Mean-Squared-Error (RMSE) between the logarith
 
 # issues
 When I was traianing my model, I found some variables like "BsmtFinType1" use NA to present No Basement, but still it may be a real NA.
+In testing set, GarageYrBlt has a wierd value 2207
